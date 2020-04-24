@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import './index.scss';
+import React, { FC } from 'react';
+import { Sudoku } from 'components/Sudoku';
 
-function Index(ctx) {
+const Index: FC = () => {
 
-  let [grid, setGrid] = useState(Array(9).fill(Array(9).fill(0)));
-  console.log(grid);
-  return (
-    <div className="sudoku">
-      <div className="sudoku__grid">
-        {grid.map(row => row.map(col => <div className="sudoku__grid__item">{col}</div>))}
-      </div>
-    </div>
-  );
-}
-
-Index.getInitialProps = async ctx => {
-  return {};
+    return (
+        <Sudoku puzzle={[
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 8, 0, 0, 0, 0, 7, 2, 5],
+            [0, 0, 0, 0, 0, 0, 8, 4, 0],
+            [0, 0, 0, 3, 0, 0, 0, 5, 0],
+            [1, 0, 0, 7, 0, 2, 0, 0, 0],
+            [0, 3, 0, 1, 0, 6, 9, 0, 0],
+            [5, 6, 0, 0, 0, 3, 0, 0, 4],
+            [0, 0, 2, 0, 0, 4, 0, 1, 0],
+            [0, 9, 0, 0, 0, 7, 6, 0, 0],
+        ]} />
+    );
 };
 
 export default Index;

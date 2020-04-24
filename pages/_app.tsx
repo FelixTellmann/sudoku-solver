@@ -13,8 +13,8 @@ function Layout({ pageProps, Component }: Props) {
   const [isLoading, setIsloading] = useState(false);
 
   return (
-    <div className="popup" onClick={() => setIsloading(!isLoading)}>
-      <Border loading={isLoading} width="2px" duration={2}
+    <div className="popup"/* onClick={() => setIsloading(!isLoading)}*/>
+      <Border loading={isLoading} width="4px" duration={0}
               color={`linear-gradient(180deg, ${theme.color_accent_primary}, ${theme.color_accent_secondary})`} />
       <Component {...pageProps} />
     </div>
