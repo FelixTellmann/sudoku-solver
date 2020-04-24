@@ -2,9 +2,19 @@ import React, { FC, useEffect, useState, useRef, MouseEvent } from 'react';
 import './Sudoku.scss';
 import { useGlobalEvent, useMouseEvents } from 'beautiful-react-hooks';
 import { SudokuCell } from './SudokuCell';
-import { loadGetInitialProps } from "next/dist/next-server/lib/utils";
-import { is } from "@babel/types";
 
+/*
+*  TODO:
+ - Arrow Key Functionality (WASD)
+ - Control Dashboard
+ - Cycle through fixed keyboard shortcuts (numbers)
+ - Color Highlighting
+ - Undo / Redu functionality
+ - Documentation - Blog Post
+ - Leaderboard
+ - Timer
+ - Custom Rules
+ * */
 type sudokuProps = {
     puzzle: number[][];
 }
@@ -118,6 +128,11 @@ const isPossible = ([x, y], num, sudokuData) => {
 };
 
 const calcOneAtATime = (sudoku) => {
+
+    // Do Something Here
+    // Then recall the parent function to
+    // create a recursive loop.
+
     let possibles = Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => []));
     for (let x = 0; x < 9; x++) {
         for (let y = 0; y < 9; y++) {
@@ -140,22 +155,7 @@ const calcOneAtATime = (sudoku) => {
             }
         }
     }
-    console.log(sudoku.value.filter(row => row.indexOf(0) >= 0 ))
-    /*
-    sudoku.value.filter(row => row.indexOf(0) >= 0 ).length && calcOneAtATime(sudoku)*/
-};
 
-const solveSudoku = (setSudokuData) => {
-    let possibles = Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => []));
-
-    setSudokuData(sudoku => {
-
-        calcOneAtATime(sudoku);
-
-
-
-        return { ...sudoku };
-    });
 };
 
 export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
@@ -209,6 +209,19 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
         }
     });
 
+    const solveSudoku = (setSudokuData) => {
+
+        const updateOneAtATime = () => {
+            setTimeout(function () {
+                setSudokuData(sudoku => {
+                    calcOneAtATime(sudoku);
+                    return { ...sudoku };
+                });
+                sudoku.value.filter(row => row.indexOf(0) >= 0).length && updateOneAtATime();
+            }, 125);
+        };
+        updateOneAtATime();
+    };
     useEffect(() => hydrateSudoku(puzzle, setSudoku), []);
 
     return (
