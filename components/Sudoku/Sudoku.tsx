@@ -1,7 +1,9 @@
-import React, { FC, useEffect, useState } from 'react';
+import React, { FC, useEffect, useState, useRef, MouseEvent } from 'react';
 import './Sudoku.scss';
 import { useGlobalEvent, useMouseEvents } from 'beautiful-react-hooks';
 import { SudokuCell } from './SudokuCell';
+import { loadGetInitialProps } from "next/dist/next-server/lib/utils";
+import { is } from "@babel/types";
 
 type sudokuProps = {
     puzzle: number[][];
@@ -17,17 +19,142 @@ type sudokuDataProps = {
 }
 const hydrateSudoku = (puzzle, setSudokuData) => {
     setSudokuData(sudoku => {
-
         puzzle.forEach((row, x) => {
             row.forEach((num, y) => {
                 sudoku.fixed[x][y] = !!num;
                 sudoku.value[x][y] = num;
             });
         });
+        return { ...sudoku };
+    });
+};
 
+const clearSelected = (setSudokuData) => {
+    setSudokuData(sudoku => {
         return {
             ...sudoku,
+            selected: Array(9).fill(undefined).map(() => Array(9).fill(false)),
         };
+    });
+};
+
+const addToSelected = ([x, y], setSudokuData) => {
+    setSudokuData(sudoku => {
+        sudoku.selected[x][y] = true;
+        return { ...sudoku };
+    });
+};
+
+const addValueToSelected = (num, setSudokuData) => {
+    setSudokuData(sudoku => {
+        sudoku.selected.forEach((row, x) => {
+            row.forEach((isSelected, y) => {
+                isSelected && !sudoku.fixed[x][y] && (sudoku.value[x][y] = num);
+            });
+        });
+        return { ...sudoku };
+    });
+
+};
+
+const clearValueFromSelected = (setSudokuData) => {
+    setSudokuData(sudoku => {
+        sudoku.selected.forEach((row, x) => {
+            row.forEach((isSelected, y) => {
+                isSelected && !sudoku.fixed[x][y] && (sudoku.value[x][y] = 0);
+            });
+        });
+        return { ...sudoku };
+    });
+};
+
+const togglePencilMarksOnSelected = (num, setSudokuData) => {
+    setSudokuData(sudoku => {
+        sudoku.selected.forEach((row, x) => {
+            row.forEach((isSelected, y) => {
+                if (isSelected && !sudoku.fixed[x][y]) {
+                    sudoku.pencilMarks[x][y].indexOf(num) >= 0
+                        ? sudoku.pencilMarks[x][y].splice(sudoku.pencilMarks[x][y].indexOf(num), 1)
+                        : sudoku.pencilMarks[x][y].push(num) && sudoku.pencilMarks[x][y].sort();
+                }
+            });
+        });
+        return { ...sudoku };
+    });
+};
+
+const clearPencilMarksFromSelected = (setSudokuData) => {
+    setSudokuData(sudoku => {
+        sudoku.selected.forEach((row, x) => {
+            row.forEach((isSelected, y) => {
+                isSelected && !sudoku.fixed[x][y] && (sudoku.pencilMarks[x][y] = []);
+            });
+        });
+        return { ...sudoku };
+    });
+};
+
+const isPossible = ([x, y], num, sudokuData) => {
+
+    for (let i = 0; i < 9; i++) {
+        if (sudokuData.value[x][i] === num) {
+            return false;
+        }
+
+        if (sudokuData.value[i][y] === num) {
+            return false;
+        }
+    }
+
+    for (let i = ~~((x / 3) + 1) * 3 - 3; i < ~~((x / 3) + 1) * 3; i++) {
+        for (let j = ~~((y / 3) + 1) * 3 - 3; j < ~~((y / 3) + 1) * 3; j++) {
+            if (sudokuData.value[i][j] === num) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+};
+
+const calcOneAtATime = (sudoku) => {
+    let possibles = Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => []));
+    for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 9; y++) {
+            if (+sudoku.value[x][y] === 0) {
+                for (let i = 1; i < 10; i++) {
+                    if (isPossible([x, y], i, sudoku)) {
+                        possibles[x][y].push(i);
+                    }
+                }
+            }
+        }
+    }
+    for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 9; y++) {
+            if (possibles[x][y].length === 1) {
+                sudoku.value[x][y] = possibles[x][y][0];
+                x = 10;
+                y = 10;
+                break;
+            }
+        }
+    }
+    console.log(sudoku.value.filter(row => row.indexOf(0) >= 0 ))
+    /*
+    sudoku.value.filter(row => row.indexOf(0) >= 0 ).length && calcOneAtATime(sudoku)*/
+};
+
+const solveSudoku = (setSudokuData) => {
+    let possibles = Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => []));
+
+    setSudokuData(sudoku => {
+
+        calcOneAtATime(sudoku);
+
+
+
+        return { ...sudoku };
     });
 };
 
@@ -37,203 +164,63 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
         fixed: Array(9).fill(undefined).map(() => Array(9).fill(false)),
         selected: Array(9).fill(undefined).map(() => Array(9).fill(false)),
         value: Array(9).fill(undefined).map(() => Array(9).fill(0)),
-        pencilMarks: Array(9).fill(undefined).map(() => Array(9).fill([])),
+        pencilMarks: Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => [])),
         color: Array(9).fill(undefined).map(() => Array(9).fill('')),
         flagged: Array(9).fill(undefined).map(() => Array(9).fill(false)),
         pencilMarksAlignment: 'corners',
     });
 
-    let [keys, setKeys] = useState({ shiftKey: false, ctrlKey: false, altKey: false });
     let onKeyDown = useGlobalEvent('keydown');
     let onKeyUp = useGlobalEvent('keyup');
+    let grid = useRef();
+    let { onMouseDown, onMouseUp, onMouseOver } = useMouseEvents(grid);
 
-    /*const hydratePuzzle = (puzzle) => {
-        setGrid(grid => {
-            return grid.map((row, r) => row.map((cell, c) => ({
-                    ...cell,
-                    value: puzzle[r][c],
-                    fixed: puzzle[r][c] > 0,
-                }),
-            ));
-        });
-        setTestGrid(puzzle);
-        console.log(testGrid);
-    };
-
-    useEffect(() => {
-        hydratePuzzle(puzzle);
-    }, []);
-
-    const updateTestGrid = ((value, x, y) => {
-        setTestGrid(grid => {
-            grid[x][y] = +value;
-            return grid;
-        });
-        console.log(testGrid);
-        return true;
+    /*================ Mouse Events ================*/
+    onMouseOver(({ buttons, target: { dataset: { x, y } } }) => {
+        if (buttons === 1 && x && y) {
+            addToSelected([x, y], setSudoku);
+        }
     });
 
-    /!*============================================================================
-      # Key Events
-        -
-    ==============================================================================*!/
-    let isDuplicate = (input) => input.reduce(function (acc, el, i, arr) {
+    onMouseDown(({ shiftKey, buttons, target: { dataset: { x, y } } }) => {
+        if (!shiftKey) clearSelected(setSudoku);
+        if (buttons === 1 && x && y) addToSelected([x, y], setSudoku);
+    });
 
-        if (+el !== 0 && arr.indexOf(el) !== i && acc.indexOf(el) < 0) acc.push(+el);
-        return acc;
-    }, []) || false;
-
+    /*================ Keyboard Events ================*/
     onKeyDown((e) => {
         const { key, shiftKey, ctrlKey, altKey } = e;
-        (shiftKey || ctrlKey || altKey) && setKeys({ shiftKey, ctrlKey, altKey });
+        console.log(key);
 
-        // Enter Value = NUM
-        if (!ctrlKey && key >= 1 && key <= 9) {
-            setGrid(grid => {
-                return grid.map(row => {
-                        return row.map(cell => {
-                            const { fixed, value, selected, coordinates } = cell;
-                            const [x, y] = coordinates;
-                            return {
-                                ...cell,
-                                value: fixed ? value : selected ? updateTestGrid(+key, x, y) && +key : cell.value,
-                            };
-                        });
-                    },
-                );
-            });
-        }
+        if (!ctrlKey && key >= 1 && key <= 9) addValueToSelected(+key, setSudoku);
+
+        if (!ctrlKey && (key === '0' || key === 'Numpad0' || key === 'Backspace' || key === 'Delete')) clearValueFromSelected(setSudoku);
 
         // Toggle PencilMarks = CTRL + NUM
-        ctrlKey && key >= 1 && key <= 9 && setGrid(grid => {
+        if (ctrlKey && key >= 1 && key <= 9) {
             e.preventDefault();
-            return grid.map(row => row.map(cell => ({
-                    ...cell,
-                    pencilMarks: cell.selected
-                        ? cell.pencilMarks.indexOf(key) !== -1
-                            ? cell.pencilMarks.splice(cell.pencilMarks.indexOf(key), 1) && cell.pencilMarks
-                            : cell.pencilMarks.push(key) && cell.pencilMarks.sort() && cell.pencilMarks
-                        : cell.pencilMarks,
-                }),
-            ));
-        });
-        // Remove Value = BACKSPACE || 0 || DELETE
-        !ctrlKey && (key === '0' || key === 'Numpad0' || key === 'Backspace' || key === 'Delete') && setGrid(grid => {
-            return grid.map(row => row.map(cell => {
-                    const { fixed, value, selected, coordinates } = cell;
-                    const [x, y] = coordinates;
-                    return {
-                        ...cell,
-                        value: fixed ? value : selected ? updateTestGrid(undefined, x, y) && undefined : cell.value,
-                    };
-                },
-            ));
-        });
-        // Remove PencilMarks = CTRL + BACKSPACE || 0 || DELETE
-        ctrlKey && (key === '0' || key === 'Numpad0' || key === 'Backspace' || key === 'Delete') && setGrid(grid => {
-            return grid.map(row => row.map(cell => ({
-                    ...cell,
-                    pencilMarks: cell.selected
-                        ? []
-                        : cell.pencilMarks,
-                }),
-            ));
-        });
-    });
-
-    onKeyUp((e) => {
-        e.preventDefault();
-        const { shiftKey, ctrlKey, altKey } = e;
-        setKeys({ shiftKey, ctrlKey, altKey });
-    });
-
-    /!*============================================================================
-      # Selecting Cells
-        -
-    ==============================================================================*!/
-    const clearSelection = () => {
-        setGrid(grid => {
-            return grid.map(row => row.map(cell => ({
-                    ...cell,
-                    selected: false,
-                }),
-            ));
-        });
-    };
-
-    const onSelectCells = (gridEvent) => {
-        let currentNode = gridEvent.currentTarget;
-        console.log(gridEvent.target);
-        keys.shiftKey || clearSelection();
-
-        let [x, y] = gridEvent.target.attributes['data-coordinates']?.value.split(',').map(i => +i);
-        setGrid(grid => {
-            return grid.map(row => row.map(cell => ({
-                    ...cell,
-                    selected: cell.coordinates[0] === x && cell.coordinates[1] === y ? true : cell.selected,
-                }),
-            ));
-        });
-
-        /!*============================================================================
-          # Mouse Events
-            -
-        ==============================================================================*!/
-        const useMouseEvents = cellEvent => {
-            let [x, y] = cellEvent.currentTarget.attributes['data-coordinates'].value.split(',').map(i => +i);
-            setGrid(grid => {
-                return grid.map(row => row.map(cell => ({
-                        ...cell,
-                        selected: cell.coordinates[0] === x && cell.coordinates[1] === y ? true : cell.selected,
-                    }),
-                ));
-            });
-            cellEvent.currentTarget.removeEventListener('mouseenter', useMouseEvents);
-        };
-
-        for (let i = 0; i < gridEvent.currentTarget.children.length; i++) {
-            currentNode.children[i].addEventListener('mouseenter', useMouseEvents);
+            togglePencilMarksOnSelected(+key, setSudoku);
         }
-        document.addEventListener('mouseup', () => {
-            for (let i = 0; i < currentNode.children.length; i++) {
-                currentNode.children[i].removeEventListener('mouseenter', useMouseEvents);
-            }
-        });
-    };
+        if (ctrlKey && (key === '0' || key === 'Numpad0' || key === 'Backspace' || key === 'Delete')) clearPencilMarksFromSelected(setSudoku);
 
-    /!*============================================================================
-      #Test Grid to be Correct
-        -
-    ==============================================================================*!/
-
-    useEffect(() => {
-        testGrid.forEach((row, rowIndex) => {
-            let duplicate = isDuplicate(row);
-            setGrid(grid => {
-                grid[rowIndex] = grid[rowIndex].map(cell => {
-                    return {
-                        ...cell,
-                        flag: duplicate.indexOf(cell.value) >= 0 || false,
-                    };
-                });
-                return grid;
-            });
-        });
-        testGrid.map((row, i) => row.map((cell, j) => testGrid[j][i])).forEach((invertedRow, i) => {
-            console.log(isDuplicate(invertedRow), i, 'vertical');
-        });
-    });*/
+        if (key === 'Escape') {
+            e.preventDefault();
+            clearSelected(setSudoku);
+        }
+    });
 
     useEffect(() => hydrateSudoku(puzzle, setSudoku), []);
 
     return (
-        <div className="sudoku">
-            <div className={`grid pencil-marks--${sudoku.pencilMarksAlignment}`}>{/*onMouseDown={onSelectCells}*/}
+        <div className="sudoku" onClick={() => solveSudoku(setSudoku)}>
+            <div className={`grid pencil-marks--${sudoku.pencilMarksAlignment}`}
+                 ref={grid}>{/*onMouseDown={onSelectCells}*/}
                 {sudoku.value.map((row, x) => row.map((value, y) => {
                     return <SudokuCell key={x + '' + y}
                                        x={x}
                                        y={y}
                                        value={value}
+                                       fixed={sudoku.fixed[x][y]}
                                        selected={sudoku.selected[x][y]}
                                        pencilMarks={sudoku.pencilMarks[x][y]}
                                        flagged={sudoku.flagged[x][y]}
