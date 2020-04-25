@@ -18,10 +18,19 @@
   &.flagged {
     background-color: red;
   }
+  
   &.fixed {
-    font-weight:  700;
+    font-weight: 700;
     text-shadow: 1px 1px 1px rgba(#232323, 0.4);
     color: darkblue;
+  }
+  
+  &.focus {
+    background-color: #cbcbcb;
+  }
+  
+  &.incorrect {
+    text-shadow: 3px 3px 6px rgba(#c91313, 0.7)
   }
 }
 
@@ -33,7 +42,8 @@
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
-  color: #0065b1
+  color: #0065b1;
+  text-shadow: unset;
 }
 
 .pencil-marks--center .pencil-marks {

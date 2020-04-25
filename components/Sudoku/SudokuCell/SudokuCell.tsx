@@ -9,13 +9,15 @@ export type sudokuCellProps = {
     pencilMarks: number[]
     color: string
     flagged: boolean,
-    fixed: boolean
+    fixed: boolean,
+    focus: boolean
+    possible: boolean
 };
 
-export const SudokuCell: FC<sudokuCellProps> = ({ x, y, selected, flagged, pencilMarks, value, fixed }) => {
+export const SudokuCell: FC<sudokuCellProps> = ({ x, y, selected, flagged, pencilMarks, value, fixed, focus, possible }) => {
 
     return (
-        <div className={`cell ${selected ? 'selected' : ''} ${flagged ? 'flagged' : ''} ${fixed ? 'fixed' : ''}`} data-x={x} data-y={y}>
+        <div className={`cell ${selected ? 'selected' : ''} ${flagged ? 'flagged' : ''} ${fixed ? 'fixed' : ''} ${focus ? 'focus' : ''} ${!possible ? 'incorrect' : ''}`} data-x={x} data-y={y}>
             {
                 value ? value :
                     pencilMarks.length ? (
