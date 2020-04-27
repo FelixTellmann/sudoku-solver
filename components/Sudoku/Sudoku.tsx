@@ -1,15 +1,14 @@
-import React, { FC, useEffect, useRef, useState } from 'react';
+import React, { FC, useEffect, useRef, useState, useCallback } from 'react';
 import './Sudoku.scss';
-import { useGlobalEvent, useMouseEvents, useInterval } from 'beautiful-react-hooks';
+import { useGlobalEvent, useMouseEvents, useInterval, useLocalStorage } from 'beautiful-react-hooks';
 import { SudokuCell } from './SudokuCell';
 import { SudokuControls } from "./SudokuControls";
 /*
 *  TODO:
- - Control Dashboard
- - Color Highlighting
- - Documentation - Blog Post
+ * Documentation - Blog Post
  - Leaderboard
  - Timer
+ - Responsive Design
  - Custom Rules
  * */
 
@@ -36,10 +35,17 @@ type sudokuDataProps = {
     possible: boolean[][],
     pencilMarks: number[][][],
     color: string[][],
+    errorColor: string[][],
     flagged: boolean[][],
-    pencilMarksAlignment: 'corners' | 'center',
+    easyMode: boolean,
     simpleSolvable: boolean,
+    difficulty: string,
     historyIndex: number,
+    highscores: {
+        easy: number
+        medium: number
+        hard: number
+    }
 }
 
 type sudokuHistoryDataProps = sudokuDataProps[]
@@ -54,11 +60,15 @@ function hydrateSudoku(puzzle: number[][], setSudokuData: Function, setSudokuHis
             value: Array(9).fill(undefined).map(() => Array(9).fill(0)),
             pencilMarks: Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => [])),
             color: Array(9).fill(undefined).map(() => Array(9).fill('')),
+            errorColor: Array(9).fill(undefined).map(() => Array(9).fill('')),
             flagged: Array(9).fill(undefined).map(() => Array(9).fill(false)),
             pencilMarksAlignment: 'corners',
             simpleSolvable: true,
             selectedFocus: [],
+            difficulty: 'easy',
+            highscores: getHighScores() || { easy: 0, medium: 0, hard: 0 },
             historyIndex: 0,
+
         };
         puzzle.forEach((row, x) => {
             row.forEach((num, y) => {
@@ -102,7 +112,7 @@ function navigateFocus([x, y]: [number, number], setSudokuData: Function) {
 }
 
 // Handle Value Inptut
-function addValue(num: number, setSudokuData: Function, setSudokuHistoryData: Function) {
+function addValue(num: number, setSudokuData: Function, setSudokuHistoryData: Function, timeElapsed) {
     setSudokuData(sudoku => {
         sudoku.selected.forEach((row, x) => {
             row.forEach((isSelected, y) => {
@@ -111,8 +121,12 @@ function addValue(num: number, setSudokuData: Function, setSudokuHistoryData: Fu
                 }
             });
         });
-        sudoku.possible = checkAllPossible(sudoku.value);
+        sudoku.errorColor = Array(9).fill(undefined).map(() => Array(9).fill(''));
+        sudoku.easyMode ? (sudoku.possible = checkAllPossible(sudoku.value)) : sudoku.possible = Array(9)
+            .fill(undefined)
+            .map(() => Array(9).fill(true));
         sudoku.historyIndex = updateHistory(sudoku, setSudokuHistoryData);
+        sudoku.value.filter(row => row.indexOf(0) !== -1).length === 0 && validatePuzzle(setSudokuData, timeElapsed);
         return { ...sudoku };
     });
 }
@@ -124,7 +138,36 @@ function clearValue(setSudokuData: Function) {
                 isSelected && !sudoku.fixed[x][y] && (sudoku.value[x][y] = 0);
             });
         });
-        sudoku.possible = checkAllPossible(sudoku.value);
+        sudoku.easyMode ? (sudoku.possible = checkAllPossible(sudoku.value)) : sudoku.possible = Array(9)
+            .fill(undefined)
+            .map(() => Array(9).fill(true));
+        return { ...sudoku };
+    });
+    return true;
+}
+
+// Handle Color
+function addColor(num: number, setSudokuData: Function, colorArray: string[]) {
+    setSudokuData(sudoku => {
+        sudoku.selected.forEach((row, x) => {
+            row.forEach((isSelected, y) => {
+                if (isSelected) {
+                    sudoku.color[x][y] = colorArray[num];
+                }
+            });
+        });
+        sudoku.errorColor = Array(9).fill(undefined).map(() => Array(9).fill(''));
+        return { ...sudoku };
+    });
+}
+
+function clearColor(setSudokuData: Function) {
+    setSudokuData(sudoku => {
+        sudoku.selected.forEach((row, x) => {
+            row.forEach((isSelected, y) => {
+                isSelected && (sudoku.color[x][y] = '');
+            });
+        });
         return { ...sudoku };
     });
     return true;
@@ -143,6 +186,7 @@ function togglePencilMarks(num: number, setSudokuData: Function) {
                 }
             });
         });
+        sudoku.errorColor = Array(9).fill(undefined).map(() => Array(9).fill(''));
         return { ...sudoku };
     });
 }
@@ -213,16 +257,58 @@ function solveSudoku(setSudokuData: Function) {
         solve();
         return { ...sudoku };
     });
-};
+}
+
+function validatePuzzle(setSudokuData: Function, timeElapsed) {
+    setSudokuData(sudoku => {
+        if (sudoku.value.filter(row => row.indexOf(0) !== -1).length === 0) {
+            sudoku.possible = checkAllPossible(sudoku.value);
+            if (sudoku.possible.filter(row => row.filter(col => col === false).length > 0).length > 0) {
+                alert("That doesn't look right");
+            } else {
+                alert('well done!');
+                setHighScores({
+                    easy: sudoku.difficulty === 'easy' ? timeElapsed : 0,
+                    medium: sudoku.difficulty === 'medium' ? timeElapsed : 0,
+                    hard: sudoku.difficulty === 'hard' ? timeElapsed : 0,
+                });
+                sudoku.highscores = {
+                    easy: sudoku.difficulty === 'easy' ? timeElapsed : 0,
+                    medium: sudoku.difficulty === 'medium' ? timeElapsed : 0,
+                    hard: sudoku.difficulty === 'hard' ? timeElapsed : 0,
+                };
+                // stop timer & Set record
+            }
+        }
+        sudoku.value.map((row, x) => row.map((val, y) => {
+            if (!val) {
+                sudoku.errorColor[x][y] = 'rgba(222,136,124,0.75)';
+            }
+        }));
+        sudoku.selected = Array(9).fill(undefined).map(() => Array(9).fill(false));
+        sudoku.selectedFocus = [];
+
+        return { ...sudoku };
+    });
+}
+
+function getHighScores() {
+
+    return JSON.parse(localStorage.getItem('sudoku-highscores'));
+}
+
+function setHighScores(highscores) {
+    localStorage.setItem('sudoku-highscores', JSON.stringify(highscores));
+}
 
 // Handle History
 function goBackInHistory(sudokuHistory: sudokuHistoryDataProps, setSudoku: Function) {
     setSudoku(sudoku => {
         if (sudoku.historyIndex >= 1) {
+            sudoku.easyMode && (sudoku.possible = checkAllPossible(sudokuHistory[sudoku.historyIndex - 1].value));
             return {
                 ...sudoku,
                 ...JSON.parse(JSON.stringify(sudokuHistory[sudoku.historyIndex - 1])),
-                possible: checkAllPossible(sudokuHistory[sudoku.historyIndex - 1].value),
             };
         } else {
             return { ...sudoku };
@@ -233,10 +319,10 @@ function goBackInHistory(sudokuHistory: sudokuHistoryDataProps, setSudoku: Funct
 function goForwardInHistory(sudokuHistory: sudokuHistoryDataProps, setSudoku: Function) {
     setSudoku(sudoku => {
         if (sudoku.historyIndex >= 0 && sudoku.historyIndex < sudokuHistory.length - 1) {
+            sudoku.easyMode && (sudoku.possible = checkAllPossible(sudokuHistory[sudoku.historyIndex + 1].value));
             return {
                 ...sudoku,
                 ...JSON.parse(JSON.stringify(sudokuHistory[sudoku.historyIndex + 1])),
-                possible: checkAllPossible(sudokuHistory[sudoku.historyIndex + 1].value),
             };
         } else {
             return { ...sudoku };
@@ -267,10 +353,13 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
         value: Array(9).fill(undefined).map(() => Array(9).fill(0)),
         pencilMarks: Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => [])),
         color: Array(9).fill(undefined).map(() => Array(9).fill('')),
+        errorColor: Array(9).fill(undefined).map(() => Array(9).fill('')),
         flagged: Array(9).fill(undefined).map(() => Array(9).fill(false)),
-        pencilMarksAlignment: 'corners',
+        easyMode: false,
         simpleSolvable: true,
         selectedFocus: [],
+        difficulty: 'easy',
+        highscores: { easy: 0, medium: 0, hard: 0 },
         historyIndex: 0,
     });
     let [sudokuHistory, setSudokuHistory] = useState<sudokuHistoryDataProps>([JSON.parse(JSON.stringify({
@@ -278,15 +367,25 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
         historyIndex: sudoku.historyIndex,
     }))]);
     let [activeControl, setActiveControls] = useState('value');
-
     const [timeElapsed, setTimeElapsed] = useState(0);
-// count every second
     const [stopTimeElapsing, setStopTimeElapsing] = useInterval(() => {
         setTimeElapsed(timeElapsed + 1);
     }, 1000);
 
+    const [colorArray, setColorArray] = useState([
+        'transparent',
+        '#1e3ff8',
+        '#c6127b',
+        '#ff5301',
+        '#ffb401',
+        '#73c200',
+        '#00bbbc',
+        '#fff',
+        '#171717',
+        '#1700a6',
+    ]);
+
     let onKeyDown = useGlobalEvent('keydown');
-    let onKeyUp = useGlobalEvent('keyup');
     let grid = useRef();
     let { onMouseDown, onMouseUp, onMouseOver } = useMouseEvents(grid);
 
@@ -308,7 +407,7 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
         console.log(lowerCaseKey);
         // Num Keys - Enter Value
         if (!ctrlKey && lowerCaseKey >= 1 && lowerCaseKey <= 9) {
-            addValue(+lowerCaseKey, setSudoku, setSudokuHistory);
+            addValue(+lowerCaseKey, setSudoku, setSudokuHistory, timeElapsed);
         }
         // Delete - 0 - Backspace - Remove Value
         if (!ctrlKey && (lowerCaseKey === '0' || lowerCaseKey === 'numpad0' || lowerCaseKey === 'backspace' || lowerCaseKey === 'delete')) {
@@ -375,24 +474,43 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
     });
 
     const onControlClick = ({ currentTarget: { dataset: { action, number, toggle } } }) => {
-        action === 'value' && addValue(+number, setSudoku, setSudokuHistory);
+        action === 'value' && addValue(+number, setSudoku, setSudokuHistory, timeElapsed);
         action === 'pencilMarks' && togglePencilMarks(+number, setSudoku);
-        action === 'color' && addValue(+number, setSudoku, setSudokuHistory);
+        action === 'color' && addColor(+number, setSudoku, colorArray);
         action === 'togglePencilMark' && togglePencilMarks(+number, setSudoku);
-        action === 'DELETE' && clearValue(setSudoku) && clearPencilMarks(setSudoku);
+        action === 'DELETE' && clearValue(setSudoku) && clearColor(setSudoku) && clearPencilMarks(setSudoku);
         action === 'UNDO' && goBackInHistory(sudokuHistory, setSudoku);
         action === 'REDO' && goForwardInHistory(sudokuHistory, setSudoku);
         action === 'RESET' && hydrateSudoku(puzzle, setSudoku, setSudokuHistory, setTimeElapsed);
         action === 'TOGGLE' && setActiveControls(toggle);
+        action === 'VALIDATE' && validatePuzzle(setSudoku, timeElapsed);
+        if (action === 'MODE') {
+            if (toggle === 'easy') {
+                setSudoku({
+                    ...sudoku,
+                    easyMode: false,
+                    possible: Array(9).fill(undefined).map(() => Array(9).fill(true)),
+                });
+            } else if (toggle === 'hard') {
+                setSudoku({ ...sudoku, easyMode: true, possible: checkAllPossible(sudoku.value) });
+            }
+        }
         console.log(action);
     };
 
-    useEffect(() => hydrateSudoku(puzzle, setSudoku, setSudokuHistory, setTimeElapsed), []);
+    useEffect(() => {
+        window['cheating'] = () => solveSudoku(setSudoku);
+        hydrateSudoku(puzzle, setSudoku, setSudokuHistory, setTimeElapsed);
+    }, []);
     //onClick={() => solveSudoku(setSudoku)}
+
+    useEffect(() => {
+        sudoku.value.filter(row => row.indexOf(0) !== -1).length === 0 && validatePuzzle(setSudoku, timeElapsed);
+    }, []);
 
     return (
         <div className="sudoku">
-            <div className={`grid pencil-marks--${sudoku.pencilMarksAlignment}`}
+            <div className={`grid pencil-marks--${sudoku.easyMode}`}
                  ref={grid}>{/*onMouseDown={onSelectCells}*/}
                 {sudoku.value.map((row, x) => row.map((value, y) => {
                     return <SudokuCell key={x + '' + y}
@@ -405,10 +523,12 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
                                        selected={sudoku.selected[x][y]}
                                        pencilMarks={sudoku.pencilMarks[x][y]}
                                        flagged={sudoku.flagged[x][y]}
-                                       color={sudoku.color[x][y]} />;
+                                       color={(sudoku.errorColor[x][y] ? sudoku.errorColor[x][y] : sudoku.color[x][y])}
+                    />;
                 }))}
             </div>
-            <SudokuControls timeElapsed={timeElapsed} onControlClick={onControlClick} activeControl={activeControl} />
+            <SudokuControls timeElapsed={timeElapsed} onControlClick={onControlClick} activeControl={activeControl}
+                            easyMode={sudoku.easyMode} highscores={sudoku.highscores} />
         </div>
     );
 };

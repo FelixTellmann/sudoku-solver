@@ -97,9 +97,9 @@
     border: 2px solid #1c1c1c;
     color: transparent;
     transition: 0.2s filter;
-    
+    filter: brightness(1.3);
     &:hover, &:focus, &:active {
-      filter: brightness(2);
+      filter: brightness(1.4);
     }
   }
 }
