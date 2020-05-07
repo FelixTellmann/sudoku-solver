@@ -37,6 +37,7 @@ type sudokuDataProps = {
     color: string[][],
     errorColor: string[][],
     flagged: boolean[][],
+    solutions: number[][][],
     easyMode: boolean,
     simpleSolvable: boolean,
     difficulty: string,
@@ -54,6 +55,7 @@ type sudokuHistoryDataProps = sudokuDataProps[]
 function hydrateSudoku(puzzle: number[][], setSudokuData: Function, setSudokuHistory: Function, setTimeElapsed: Function) {
     setSudokuData(sudoku => {
         sudoku = {
+            ...sudoku,
             fixed: Array(9).fill(undefined).map(() => Array(9).fill(false)),
             selected: Array(9).fill(undefined).map(() => Array(9).fill(false)),
             possible: Array(9).fill(undefined).map(() => Array(9).fill(true)),
@@ -233,6 +235,9 @@ function checkAllPossible(value: number[][]) {
 }
 
 function solveSudoku(setSudokuData: Function) {
+    let j = 0;
+    let solutions = [];
+
     setSudokuData(sudoku => {
         const solve = () => {
             for (let x = 0; x < 9; x++) {
@@ -255,6 +260,38 @@ function solveSudoku(setSudokuData: Function) {
             return true;
         };
         solve();
+        return { ...sudoku };
+    });
+}
+
+function unsolveSudoku(setSudokuData: Function) {
+    setSudokuData(sudoku => {
+        const solve = () => {
+            for (let x = 0; x < 9; x++) {
+                for (let y = 0; y < 9; y++) {
+                    if (sudoku.value[x][y] === 0) {
+                        for (let i = 1; i < 10; i++) {
+                            if (isPossible([x, y], i, sudoku.value)) {
+                                sudoku.value[x][y] = i;
+                                if (solve()) {
+                                    return true;
+                                } else {
+                                    sudoku.value[x][y] = 0;
+                                }
+                            }
+                        }
+
+                        return false;
+                    }
+                    if (x === 8 && y === 8) {
+                        sudoku.solutions.push([...JSON.parse(JSON.stringify(sudoku.value))]);
+                    }
+                }
+            }
+            return true;
+        };
+        solve();
+        console.log(sudoku.solutions);
         return { ...sudoku };
     });
 }
@@ -356,6 +393,7 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
         errorColor: Array(9).fill(undefined).map(() => Array(9).fill('')),
         flagged: Array(9).fill(undefined).map(() => Array(9).fill(false)),
         easyMode: false,
+        solutions: [],
         simpleSolvable: true,
         selectedFocus: [],
         difficulty: 'easy',
@@ -431,7 +469,7 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
             goForwardInHistory(sudokuHistory, setSudoku);
         }
         // Escape - Clear selection
-        if (lowerCaseKey === 'Escape') {
+        if (lowerCaseKey === 'escape') {
             e.preventDefault();
             clearSelected(setSudoku);
         }
@@ -500,6 +538,7 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
 
     useEffect(() => {
         window['cheating'] = () => solveSudoku(setSudoku);
+        window['unCheat'] = () => unsolveSudoku(setSudoku);
         hydrateSudoku(puzzle, setSudoku, setSudokuHistory, setTimeElapsed);
     }, []);
     //onClick={() => solveSudoku(setSudoku)}
