@@ -1,6 +1,6 @@
-import React, { FC, useEffect, useRef, useState, useCallback } from 'react';
+import React, { FC, useEffect, useRef, useState } from 'react';
 import './Sudoku.scss';
-import { useGlobalEvent, useMouseEvents, useInterval, useLocalStorage } from 'beautiful-react-hooks';
+import { useGlobalEvent, useMouseEvents, useInterval } from 'beautiful-react-hooks';
 import { SudokuCell } from './SudokuCell';
 import { SudokuControls } from "./SudokuControls";
 /*
@@ -56,20 +56,7 @@ function hydrateSudoku(puzzle: number[][], setSudokuData: Function, setSudokuHis
     setSudokuData(sudoku => {
         sudoku = {
             ...sudoku,
-            fixed: Array(9).fill(undefined).map(() => Array(9).fill(false)),
-            selected: Array(9).fill(undefined).map(() => Array(9).fill(false)),
-            possible: Array(9).fill(undefined).map(() => Array(9).fill(true)),
-            value: Array(9).fill(undefined).map(() => Array(9).fill(0)),
-            pencilMarks: Array(9).fill(undefined).map(() => Array(9).fill(undefined).map(() => [])),
-            color: Array(9).fill(undefined).map(() => Array(9).fill('')),
-            errorColor: Array(9).fill(undefined).map(() => Array(9).fill('')),
-            flagged: Array(9).fill(undefined).map(() => Array(9).fill(false)),
-            pencilMarksAlignment: 'corners',
-            simpleSolvable: true,
-            selectedFocus: [],
-            difficulty: 'easy',
             highscores: getHighScores() || { easy: 0, medium: 0, hard: 0 },
-            historyIndex: 0,
 
         };
         puzzle.forEach((row, x) => {
@@ -82,6 +69,7 @@ function hydrateSudoku(puzzle: number[][], setSudokuData: Function, setSudokuHis
         setTimeElapsed(0);
         return { ...sudoku };
     });
+    generateRandomSudoku(setSudokuData, 10);
 }
 
 // Handle Selection
@@ -235,9 +223,6 @@ function checkAllPossible(value: number[][]) {
 }
 
 function solveSudoku(setSudokuData: Function) {
-    let j = 0;
-    let solutions = [];
-
     setSudokuData(sudoku => {
         const solve = () => {
             for (let x = 0; x < 9; x++) {
@@ -264,36 +249,254 @@ function solveSudoku(setSudokuData: Function) {
     });
 }
 
-function unsolveSudoku(setSudokuData: Function) {
+function findAllSolutions(setSudokuData: Function) {
+    let solutions = [];
+
     setSudokuData(sudoku => {
-        const solve = () => {
+        let lastEditable = '' + 8 + 8;
+
+        for (let x = 0; x < 9; x++) {
+            for (let y = 0; y < 9; y++) {
+                if (!sudoku.fixed[8 - x][8 - y]) {
+                    lastEditable = '' + (8 - x) + '' + (8 - y);
+                    x = 10;
+                    y = 10;
+                    break;
+                }
+            }
+        }
+
+        function solve() {
             for (let x = 0; x < 9; x++) {
                 for (let y = 0; y < 9; y++) {
                     if (sudoku.value[x][y] === 0) {
                         for (let i = 1; i < 10; i++) {
                             if (isPossible([x, y], i, sudoku.value)) {
                                 sudoku.value[x][y] = i;
-                                if (solve()) {
+                                if (lastEditable === '' + x + '' + y) {
+                                    solutions.push(JSON.parse(JSON.stringify(sudoku.value)));
+                                    sudoku.value[x][y] = 0;
+                                } else if (solve()) {
                                     return true;
                                 } else {
                                     sudoku.value[x][y] = 0;
                                 }
+                            } else if (i === 9) {
+                                return false;
                             }
                         }
-
                         return false;
                     }
-                    if (x === 8 && y === 8) {
-                        sudoku.solutions.push([...JSON.parse(JSON.stringify(sudoku.value))]);
+                    if (x === 8 && y === 8 && solutions.length === 0) {
+                        return false;
                     }
                 }
             }
             return true;
-        };
+        }
+
         solve();
-        console.log(sudoku.solutions);
+        console.log(solutions);
+        return { ...sudoku, value: solutions[0], solutions: solutions };
+    });
+}
+
+function isUniquelySolvable(sudokuData: sudokuDataProps): number {
+    let solutions = [];
+    let sudoku = JSON.parse(JSON.stringify(sudokuData));
+    let lastEditable = '' + 8 + 8;
+
+    for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 9; y++) {
+            if (sudoku.value[8 - x][8 - y] === 0) {
+                lastEditable = '' + (8 - x) + '' + (8 - y);
+                x = 10;
+                y = 10;
+                break;
+            }
+        }
+    }
+
+    let iterations = 0;
+
+    function solve() {
+        iterations++;
+        if (iterations > 10000) {
+            return false;
+        }
+        for (let x = 0; x < 9; x++) {
+            for (let y = 0; y < 9; y++) {
+                if (sudoku.value[x][y] === 0) {
+                    for (let i = 1; i < 10; i++) {
+                        if (isPossible([x, y], i, sudoku.value)) {
+                            sudoku.value[x][y] = i;
+                            if (lastEditable === '' + x + '' + y) {
+                                solutions.push(JSON.parse(JSON.stringify(sudoku.value)));
+                                if (solutions.length > 1) {
+                                    x = 10;
+                                    y = 10;
+                                    i = 10;
+                                    break;
+                                }
+                                sudoku.value[x][y] = 0;
+                            } else if (solve()) {
+
+                                return true;
+                            } else {
+                                sudoku.value[x][y] = 0;
+                            }
+                        } else if (i === 9) {
+                            return false;
+                        }
+                    }
+                    return false;
+                }
+                if (x === 8 && y === 8 && solutions.length === 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    solve();
+    return solutions.length;
+
+}
+
+function generateRandomSudoku(setSudokuData: Function, difficulty: number) {
+    setSudokuData(sudokuData => {
+        let randomTriesLimit = 0;
+        let sudoku = JSON.parse(JSON.stringify(sudokuData));
+
+        function updateValueCount() {
+            return sudoku.value.reduce((acc, rowCount) => {
+                acc = acc + rowCount.reduce((acc2, item) => {
+                    item > 0 && acc2++;
+                    return acc2;
+                }, 0);
+                return acc;
+            }, 0);
+        }
+
+        let valueCount = updateValueCount();
+
+        function addRandomValue() {
+            if (randomTriesLimit < 100) {
+
+                randomTriesLimit++;
+                let x = ~~(Math.random() * 9);
+                let y = ~~(Math.random() * 9);
+                let i = ~~(Math.random() * 9) + 1;
+                if (sudoku.value[x][y] === 0 && isPossible([x, y], i, sudoku.value)) {
+                    sudoku.value[x][y] = i;
+                    valueCount = updateValueCount();
+                    let possibleSolutions = 2;
+                    valueCount > 10 && (possibleSolutions = isUniquelySolvable(JSON.parse(JSON.stringify(sudoku))));
+
+                    if (possibleSolutions === 0) {
+                        sudoku.value[x][y] = 0;
+                        valueCount = updateValueCount();
+                        addRandomValue();
+                    } else if (possibleSolutions === 1) {
+                        if (valueCount < difficulty) {
+                            addRandomValue();
+                        }
+                    } else if (possibleSolutions > 1) {
+                        addRandomValue();
+                    }
+                } else {
+                    addRandomValue();
+                }
+            } else {
+                sudoku = JSON.parse(JSON.stringify(sudokuData));
+                randomTriesLimit = 0;
+                addRandomValue();
+            }
+        }
+
+        addRandomValue();
         return { ...sudoku };
     });
+}
+
+function visualSolve(setSudokuData: Function, delay) {
+    let answers = Array(9).fill(undefined).map(() => Array(9).fill(0));
+
+    function changeCellValue(x = 0, y = 0, i = 1, backTracking = false) {
+        if (x < 9 && y < 9) {
+            setTimeout(() => {
+
+                if (i < 10) {
+                    setSudokuData(sudoku => {
+                        answers[x][y] = sudoku.value[x][y] || i;
+                        if (!sudoku.fixed[x][y]) {
+                            backTracking = false;
+                            answers[x][y] = i;
+                            sudoku.value[x][y] = i;
+                            if (isPossible([x, y], i, sudoku.value)) {
+                                i = 10;
+                                backTracking = false;
+                            }
+                            if (i === 9 && !isPossible([x, y], i, sudoku.value)) {
+                                answers[x][y] = 0;
+                                sudoku.value[x][y] = 0;
+                                if (y > 0) y--; else {
+                                    y = 8;
+                                    x--;
+                                }
+                                i = answers[x][y] + 1;
+                                backTracking = true;
+                            }
+                            return { ...sudoku };
+                        } else {
+                            i = 10;
+                            if (backTracking) {
+                                if (y > 0) y--; else {
+                                    y = 8;
+                                    x--;
+                                }
+                                i = answers[x][y] + 1;
+                                backTracking = true;
+                            }
+                            return sudoku;
+                        }
+                    });
+                }
+
+                if (!backTracking) {
+                    if (i < 9) i++; else {
+                        i = 1;
+                        if (y < 8) y++; else {
+                            y = 0;
+                            x++;
+                        }
+                    }
+                }
+
+                if (i >= 10 && backTracking) {
+                    setSudokuData(sudoku => {
+                        if (!sudoku.fixed[x][y]) {
+                            answers[x][y] = 0;
+                            sudoku.value[x][y] = 0;
+                            return { ...sudoku };
+                        } else {
+                            return sudoku;
+                        }
+                    });
+                    if (y > 0) y--; else {
+                        y = 8;
+                        x--;
+                    }
+                    i = answers[x][y] + 1;
+                }
+
+                changeCellValue(x, y, i, backTracking);
+            }, delay);
+        }
+    }
+
+    changeCellValue();
 }
 
 function validatePuzzle(setSudokuData: Function, timeElapsed) {
@@ -425,7 +628,7 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
 
     let onKeyDown = useGlobalEvent('keydown');
     let grid = useRef();
-    let { onMouseDown, onMouseUp, onMouseOver } = useMouseEvents(grid);
+    let { onMouseDown, onMouseOver } = useMouseEvents(grid);
 
     /*================ Mouse Events ================*/
     onMouseOver(({ buttons, target: { dataset: { x, y } } }) => {
@@ -440,7 +643,7 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
 
     /*================ Keyboard Events ================*/
     onKeyDown((e) => {
-        const { key, shiftKey, ctrlKey, altKey } = e;
+        const { key, shiftKey, ctrlKey } = e;
         let lowerCaseKey = key.toLowerCase();
         console.log(lowerCaseKey);
         // Num Keys - Enter Value
@@ -538,7 +741,10 @@ export const Sudoku: FC<sudokuProps> = ({ puzzle }) => {
 
     useEffect(() => {
         window['cheating'] = () => solveSudoku(setSudoku);
-        window['unCheat'] = () => unsolveSudoku(setSudoku);
+        window['findAll'] = () => findAllSolutions(setSudoku);
+        window['unCheat'] = () => visualSolve(setSudoku, 0.005);
+        window['unique'] = () => isUniquelySolvable(sudoku);
+        window['generate'] = () => generateRandomSudoku(setSudoku, 80);
         hydrateSudoku(puzzle, setSudoku, setSudokuHistory, setTimeElapsed);
     }, []);
     //onClick={() => solveSudoku(setSudoku)}
